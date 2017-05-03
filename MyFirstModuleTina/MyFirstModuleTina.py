@@ -99,8 +99,12 @@ class MyFirstModuleTinaWidget(ScriptedLoadableModuleWidget):
     #
     self.enableScreenshotsFlagCheckBox = qt.QCheckBox()
     self.enableScreenshotsFlagCheckBox.checked = 0
-    self.enableScreenshotsFlagCheckBox.setToolTip("If checked, take screen shots for tutorials. Use Save Data to write them to disk.")
-    parametersFormLayout.addRow("Enable Screenshots", self.enableScreenshotsFlagCheckBox)
+    self.enableScreenshotsFlagCheckBox.setToolTip("Enable auto-update")
+    parametersFormLayout.addRow("Auto-update", self.enableScreenshotsFlagCheckBox)
+    self.observedMarkupNode = None
+    self.markupsObserverTag = None
+    self.enableScreenshotsFlagCheckBox.connect("toggled(bool)", self.onEnableAutoUpdate)
+
 
     #
     # Apply Button
@@ -129,6 +133,20 @@ class MyFirstModuleTinaWidget(ScriptedLoadableModuleWidget):
 
   def onSelect(self):
     self.applyButton.enabled = self.inputSelector.currentNode()
+	
+  def onEnableAutoUpdate(self, autoUpdate):
+    if self.markupsObserverTag:
+      self.observedMarkupNode.RemoveObserver(self.markupsObserverTag)
+      self.observedMarkupNode = None
+      self.markupsObserverTag = None
+    if autoUpdate and self.inputSelector.currentNode:
+      self.observedMarkupNode = self.inputSelector.currentNode()
+      self.markupsObserverTag = self.observedMarkupNode.AddObserver(
+      vtk.vtkCommand.ModifiedEvent, self.onMarkupsUpdated)
+		
+  def onMarkupsUpdated(self, caller=None, event=None):
+    self.onApplyButton()
+
 
   def onApplyButton(self):
     logic = MyFirstModuleTinaLogic()
