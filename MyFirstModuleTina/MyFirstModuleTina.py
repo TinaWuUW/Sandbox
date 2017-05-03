@@ -15,7 +15,7 @@ class MyFirstModuleTina(ScriptedLoadableModule):
 
   def __init__(self, parent):
     ScriptedLoadableModule.__init__(self, parent)
-    self.parent.title = "MyFirstModuleTina" # TODO make this more human readable by adding spaces
+    self.parent.title = "Center of Mass" # TODO make this more human readable by adding spaces
     self.parent.categories = ["Examples"]
     self.parent.dependencies = []
     self.parent.contributors = ["John Doe (AnyWare Corp.)"] # replace with "Firstname Lastname (Organization)"
@@ -57,8 +57,8 @@ class MyFirstModuleTinaWidget(ScriptedLoadableModuleWidget):
     # input volume selector
     #
     self.inputSelector = slicer.qMRMLNodeComboBox()
-    self.inputSelector.nodeTypes = ["vtkMRMLScalarVolumeNode"]
-    self.inputSelector.selectNodeUponCreation = True
+    self.inputSelector.nodeTypes = ["vtkMRMLMarkupsFiducialNode"]
+    self.inputSelector.selectNodeUponCreation = False
     self.inputSelector.addEnabled = False
     self.inputSelector.removeEnabled = False
     self.inputSelector.noneEnabled = False
@@ -66,7 +66,7 @@ class MyFirstModuleTinaWidget(ScriptedLoadableModuleWidget):
     self.inputSelector.showChildNodeTypes = False
     self.inputSelector.setMRMLScene( slicer.mrmlScene )
     self.inputSelector.setToolTip( "Pick the input to the algorithm." )
-    parametersFormLayout.addRow("Input Volume: ", self.inputSelector)
+    parametersFormLayout.addRow("Input Markups: ", self.inputSelector)
 
     #
     # output volume selector
@@ -110,6 +110,9 @@ class MyFirstModuleTinaWidget(ScriptedLoadableModuleWidget):
     self.applyButton.enabled = False
     parametersFormLayout.addRow(self.applyButton)
 
+    self.outputLabel = qt.QLabel()
+    parametersFormLayout.addRow(self.outputLabel) 
+
     # connections
     self.applyButton.connect('clicked(bool)', self.onApplyButton)
     self.inputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
@@ -125,13 +128,15 @@ class MyFirstModuleTinaWidget(ScriptedLoadableModuleWidget):
     pass
 
   def onSelect(self):
-    self.applyButton.enabled = self.inputSelector.currentNode() and self.outputSelector.currentNode()
+    self.applyButton.enabled = self.inputSelector.currentNode()
 
   def onApplyButton(self):
     logic = MyFirstModuleTinaLogic()
     enableScreenshotsFlag = self.enableScreenshotsFlagCheckBox.checked
     imageThreshold = self.imageThresholdSliderWidget.value
     logic.run(self.inputSelector.currentNode(), self.outputSelector.currentNode(), imageThreshold, enableScreenshotsFlag)
+    self.outputLabel.text = str(logic.centerOfMass)
+
 
 #
 # MyFirstModuleTinaLogic
@@ -211,28 +216,32 @@ class MyFirstModuleTinaLogic(ScriptedLoadableModuleLogic):
     annotationLogic = slicer.modules.annotations.logic()
     annotationLogic.CreateSnapShot(name, description, type, 1, imageData)
 
-  def run(self, inputVolume, outputVolume, imageThreshold, enableScreenshots=0):
+	
+  def getCenterOfMass(self, markupsNode):
+    centerOfMass = [0,0,0]
+
+    import numpy as np
+    sumPos = np.zeros(3)
+    for i in range(markupsNode.GetNumberOfMarkups()):
+      pos = np.zeros(3)
+      markupsNode.GetNthFiducialPosition(i,pos)
+      sumPos += pos
+    
+    centerOfMass = sumPos / markupsNode.GetNumberOfMarkups()
+    
+    logging.info('Center of mass for \'' + markupsNode.GetName() + '\': ' + repr(centerOfMass))
+
+    return centerOfMass 
+
+	
+  def run(self, inputMarkups, outputVolume, imageThreshold, enableScreenshots=0):
     """
     Run the actual algorithm
     """
-
-    if not self.isValidInputOutputData(inputVolume, outputVolume):
-      slicer.util.errorDisplay('Input volume is the same as output volume. Choose a different output volume.')
-      return False
-
-    logging.info('Processing started')
-
-    # Compute the thresholded output volume using the Threshold Scalar Volume CLI module
-    cliParams = {'InputVolume': inputVolume.GetID(), 'OutputVolume': outputVolume.GetID(), 'ThresholdValue' : imageThreshold, 'ThresholdType' : 'Above'}
-    cliNode = slicer.cli.run(slicer.modules.thresholdscalarvolume, None, cliParams, wait_for_completion=True)
-
-    # Capture screenshot
-    if enableScreenshots:
-      self.takeScreenshot('MyFirstModuleTinaTest-Start','MyScreenshot',-1)
-
-    logging.info('Processing completed')
-
+    self.centerOfMass = self.getCenterOfMass(inputMarkups)
+      
     return True
+
 
 
 class MyFirstModuleTinaTest(ScriptedLoadableModuleTest):
